@@ -11,77 +11,124 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Retrieve tokens from .env
+// Environment Configuration
+const PORT = process.env.PORT || 3000;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const MY_TELEGRAM_CHAT_ID = process.env.MY_TELEGRAM_CHAT_ID;
 
 if (!TELEGRAM_BOT_TOKEN || !MY_TELEGRAM_CHAT_ID) {
-  console.error("⚠️ WARNING: Please set TELEGRAM_BOT_TOKEN and MY_TELEGRAM_CHAT_ID in your .env file!");
+  console.warn("⚠️ WARNING: Please set TELEGRAM_BOT_TOKEN and MY_TELEGRAM_CHAT_ID in your .env file!");
 }
 
-// Initialize Telegram Bot with long polling
+// Initialize Telegram Bot with error handling
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, 'public/uploads');
+bot.on('polling_error', (error) => {
+  console.error(`[Telegram Bot Error] ${error.code}: ${error.message}`);
+});
+
+// Ensure upload directory exists inside public/
+const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Multer storage for user image uploads
+// Multer storage engine for image uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueSuffix}${ext}`);
+  }
 });
-const upload = multer({ storage });
 
-app.use(express.static('public'));
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Middleware
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Store active web socket user sessions (socketId -> userName)
+// Store active web socket user sessions (socketId -> session object)
 const activeSockets = new Map();
 
-// 1. Upload Route (Website -> Telegram)
-app.post('/upload', upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
-  
-  const imageUrl = `/uploads/${req.file.filename}`;
-  const { userName, socketId } = req.body;
+// -------------------------------------------------------------
+// 1. Image Upload Route (Website -> Server -> Telegram)
+// -------------------------------------------------------------
+app.post('/upload', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image file uploaded.' });
+    
+    const imageUrl = `/uploads/${req.file.filename}`;
+    const { userName, socketId } = req.body;
+    const clientName = userName || 'Client';
 
-  // Send photo to your Telegram bot
-  if (MY_TELEGRAM_CHAT_ID) {
-    bot.sendPhoto(MY_TELEGRAM_CHAT_ID, path.join(__dirname, 'public', imageUrl), {
-      caption: `📷 Image from ${userName || 'User'} (ID: ${socketId})`
-    }).catch(err => console.error('Telegram Send Error:', err.message));
+    // Broadcast image back to user's chat window immediately
+    if (socketId) {
+      io.to(socketId).emit('chat_message', {
+        sender: clientName,
+        image: imageUrl,
+        isUser: true
+      });
+    }
+
+    // Forward image to Ann on Telegram
+    if (MY_TELEGRAM_CHAT_ID) {
+      const fullFilePath = path.join(uploadDir, req.file.filename);
+      const captionText = `📷 *New Photo from ${clientName}*\nSocket ID: \`${socketId}\``;
+
+      await bot.sendPhoto(MY_TELEGRAM_CHAT_ID, fullFilePath, {
+        caption: captionText,
+        parse_mode: 'Markdown'
+      });
+    }
+
+    res.json({ imageUrl });
+  } catch (err) {
+    console.error('Error handling upload:', err);
+    res.status(500).json({ error: 'Failed to upload image.' });
   }
-
-  res.json({ imageUrl });
 });
 
-// 2. Real-time WebSockets setup
+// -------------------------------------------------------------
+// 2. WebSockets Connection & Events (Client <-> Server)
+// -------------------------------------------------------------
 io.on('connection', (socket) => {
-  console.log('🟢 Web client connected:', socket.id);
+  console.log(`🟢 New web user connected: ${socket.id}`);
 
-  // When user enters their name to start chatting
+  // User enters their name and opens chat
   socket.on('join_chat', (data) => {
     const userName = data.userName || 'Guest';
-    activeSockets.set(socket.id, userName);
+    const ticketTitle = data.ticketTitle || 'General Suite Inquiry';
 
-    // Alert you on Telegram that someone started a booking chat
+    activeSockets.set(socket.id, { userName, ticketTitle });
+
+    // Send introductory welcome message from Ann on website
+    socket.emit('chat_message', {
+      sender: 'Ann',
+      text: `Hello ${userName}! Welcome to Atlanta Falcons Suites. How can I help you with your booking today?`,
+      isUser: false
+    });
+
+    // Notify Ann on Telegram
     if (MY_TELEGRAM_CHAT_ID) {
       bot.sendMessage(
-        MY_TELEGRAM_CHAT_ID, 
-        `🟢 *New Client Chat Started*\nUser: *${userName}*\nSocket ID: \`${socket.id}\`\nTicket: *${data.ticketTitle || 'General Inquiry'}*`,
+        MY_TELEGRAM_CHAT_ID,
+        `🎟️ *New Ticket Booking Inquiry*\n\n👤 *Client:* ${userName}\n🎫 *Item:* ${ticketTitle}\n🆔 *Socket ID:* \`${socket.id}\`\n\n_Reply to this notification to chat with the client._`,
         { parse_mode: 'Markdown' }
-      );
+      ).catch(e => console.error('Telegram Notify Error:', e.message));
     }
   });
 
-  // Incoming text from website client
+  // Client sends text message from Website
   socket.on('user_message', (data) => {
-    const userName = activeSockets.get(socket.id) || 'User';
+    const session = activeSockets.get(socket.id);
+    const userName = session ? session.userName : 'Client';
 
-    // Broadcast message to user's web chat UI
+    // Emit message to client UI
     socket.emit('chat_message', {
       sender: userName,
       text: data.text,
@@ -89,38 +136,50 @@ io.on('connection', (socket) => {
       isUser: true
     });
 
-    // Forward to Telegram
-    if (MY_TELEGRAM_CHAT_ID) {
-      const msgText = `💬 *${userName}* (\`${socket.id}\`):\n${data.text || '[Image Attachment]'}`;
-      bot.sendMessage(MY_TELEGRAM_CHAT_ID, msgText, { parse_mode: 'Markdown' });
+    // Send to Telegram
+    if (MY_TELEGRAM_CHAT_ID && data.text) {
+      const formattedMessage = `💬 *${userName}* (\`${socket.id}\`):\n${data.text}`;
+      bot.sendMessage(MY_TELEGRAM_CHAT_ID, formattedMessage, { parse_mode: 'Markdown' })
+         .catch(e => console.error('Telegram Send Error:', e.message));
     }
   });
 
   socket.on('disconnect', () => {
-    console.log('🔴 Web client disconnected:', socket.id);
+    console.log(`🔴 Web user disconnected: ${socket.id}`);
     activeSockets.delete(socket.id);
   });
 });
 
-// 3. Receive replies from Telegram and deliver to Web client as "Ann"
+// -------------------------------------------------------------
+// 3. Telegram Reply Handler (Ann on Telegram -> Web Client)
+// -------------------------------------------------------------
 bot.on('message', async (msg) => {
+  // Only process messages coming from Ann's configured Chat ID
   if (!MY_TELEGRAM_CHAT_ID || msg.chat.id.toString() !== MY_TELEGRAM_CHAT_ID.toString()) return;
 
-  // Attempt to target socket ID by replying to a forwarded message containing the Socket ID
   let targetSocketId = null;
+
+  // Option A: Extract Target Socket ID if replying directly to a Telegram notification
   if (msg.reply_to_message && msg.reply_to_message.text) {
     const match = msg.reply_to_message.text.match(/Socket ID: `([^`]+)`|\(([^)]+)\)/);
-    if (match) targetSocketId = match[1] || match[2];
+    if (match) {
+      targetSocketId = match[1] || match[2];
+    }
   }
 
-  // Fallback: If not replying directly to a message, send to the last connected web user
+  // Option B: Fallback to the latest connected user if not replying to a specific message
   if (!targetSocketId && activeSockets.size > 0) {
     targetSocketId = Array.from(activeSockets.keys())[activeSockets.size - 1];
   }
 
-  if (!targetSocketId) return;
+  if (!targetSocketId || !activeSockets.has(targetSocketId)) {
+    if (!msg.text?.startsWith('/')) {
+      bot.sendMessage(MY_TELEGRAM_CHAT_ID, "⚠️ *No active user session found to receive this message.*", { parse_mode: 'Markdown' });
+    }
+    return;
+  }
 
-  // If text message from Ann
+  // Handle Text Reply from Ann
   if (msg.text) {
     io.to(targetSocketId).emit('chat_message', {
       sender: 'Ann',
@@ -129,12 +188,13 @@ bot.on('message', async (msg) => {
     });
   }
 
-  // If photo attachment from Ann
+  // Handle Photo Reply from Ann
   if (msg.photo) {
     try {
+      // Get highest resolution photo version
       const fileId = msg.photo[msg.photo.length - 1].file_id;
       const fileLink = await bot.getFileLink(fileId);
-      
+
       io.to(targetSocketId).emit('chat_message', {
         sender: 'Ann',
         text: msg.caption || '',
@@ -142,12 +202,12 @@ bot.on('message', async (msg) => {
         isUser: false
       });
     } catch (err) {
-      console.error('Failed to get Telegram photo link:', err.message);
+      console.error('Failed to process photo from Telegram:', err.message);
     }
   }
 });
 
-const PORT = process.env.PORT || 3000;
+// Start Server
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Falcons Suite Booking Server live on http://localhost:${PORT}`);
 });
