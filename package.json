@@ -1,11 +1,10 @@
 {
-  "name": "falcons-suite-booking",
+  "name": "falcons-suite-booking-backend",
   "version": "1.0.0",
-  "description": "Atlanta Falcons Suites ticket booking website with Telegram real-time chat integration",
+  "description": "Backend server for ticket booking live chat",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
