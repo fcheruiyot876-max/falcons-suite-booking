@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Atlanta Falcons Suites - Ticket Booking & Chat</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Socket.io Client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 pb-12 min-h-screen">
+
+  <!-- Header / Navigation -->
+  <header class="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 shadow-sm max-w-md mx-auto">
+    <!-- Brand Logo -->
+    <div class="bg-slate-800 text-white font-bold text-lg px-3 py-1 rounded tracking-wide flex-shrink-0">
+      SEG
+    </div>
+    
+    <!-- Search Bar -->
+    <div class="relative flex-1 max-w-xs">
+      <input 
+        type="text" 
+        placeholder="Search events, teams..." 
+        class="w-full bg-gray-100 border border-gray-300 rounded-md py-1.5 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+      />
+    </div>
+
+    <!-- Menu Icon -->
+    <button class="p-1 text-gray-700 hover:text-black focus:outline-none">
+      <i data-lucide="menu" class="w-6 h-6"></i>
+    </button>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-md mx-auto bg-white min-h-screen border-x border-gray-200 shadow-sm relative">
+    
+    <!-- Hero / Details Section -->
+    <section class="p-5 text-center">
+      <h1 class="text-3xl font-extrabold tracking-tight text-gray-900 mb-2">
+        Atlanta Falcons Suites
+      </h1>
+      <p class="text-xs text-gray-500 font-medium leading-relaxed">
+        Mercedes-Benz Stadium, 1 AMB Drive Northwest,<br />Atlanta, GA
+      </p>
+
+      <!-- Partner Badge -->
+      <div class="flex items-center justify-center gap-2 mt-4 mb-5">
+        <div class="w-7 h-7 bg-red-600 rounded-full flex items-center justify-center text-white font-black text-xs">
+          F
+        </div>
+        <span class="text-xs font-semibold tracking-wider text-gray-500 uppercase">
+          Authorized Partner
+        </span>
+      </div>
+
+      <!-- Image Carousel Box -->
+      <div class="relative rounded-lg overflow-hidden bg-gray-200 aspect-[16/9] shadow-inner flex items-center justify-center group">
+        <img 
+          id="carousel-img"
+          src="https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800&q=80" 
+          alt="Stadium Suite" 
+          class="w-full h-full object-cover"
+        />
+        
+        <button onclick="prevImage()" class="absolute left-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full backdrop-blur-sm transition">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        
+        <button onclick="nextImage()" class="absolute right-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full backdrop-blur-sm transition">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+
+        <div class="absolute bottom-3 left-4 bg-black/60 text-white text-xs px-2 py-0.5 rounded font-mono">
+          <span id="slide-index">19</span> / 20
+        </div>
+      </div>
+    </section>
+
+    <!-- Upcoming Events Header -->
+    <section class="px-5 pt-2 pb-3 flex items-center justify-between">
+      <h2 class="text-2xl font-bold text-gray-900">Upcoming Events</h2>
+      
+      <button class="relative flex items-center gap-1.5 border border-blue-400 text-blue-600 px-3 py-1 rounded-md text-sm font-medium hover:bg-blue-50 transition">
+        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+        Filter
+        <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full"></span>
+      </button>
+    </section>
+
+    <!-- Event List Render Container -->
+    <section id="events-container" class="divide-y divide-gray-200 min-h-[200px]">
+      <!-- Events injected via JavaScript -->
+    </section>
+
+    <div class="p-8 text-center text-gray-600 text-sm">
+      <p class="leading-relaxed">
+        18 events hidden. Update or <a href="#" class="underline text-gray-900 font-medium">reset your filter settings</a> to view more.
+      </p>
+    </div>
+
+  </main>
+
+  <!-- ================= 1. TICKET BOOKING DETAILS MODAL ================= -->
+  <div id="booking-modal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-xs flex justify-center items-end sm:items-center p-0 sm:p-4 transition-opacity">
+    <div class="w-full max-w-md bg-slate-900 text-white rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-2xl relative max-h-[92vh] flex flex-col">
+      
+      <div class="relative h-60 bg-slate-900 overflow-hidden flex-shrink-0">
+        <img 
+          src="https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800&q=80" 
+          alt="Loge Box View" 
+          class="w-full h-full object-cover opacity-40"
+        />
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+
+        <div class="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
+          <button onclick="closeBookingModal()" class="w-10 h-10 rounded-full bg-black/50 border border-white/20 text-white flex items-center justify-center hover:bg-black/80 transition">
+            <i data-lucide="chevron-left" class="w-6 h-6"></i>
+          </button>
+          
+          <div class="bg-slate-800/90 text-white font-bold text-sm px-3 py-1 rounded border border-white/10">
+            SEG
+          </div>
+        </div>
+
+        <div class="absolute bottom-4 left-5 right-5 z-10">
+          <span class="inline-block bg-slate-700/80 text-blue-300 text-xs font-semibold px-2.5 py-1 rounded mb-2 backdrop-blur-sm border border-blue-400/20">
+            Private Premium Loge Box
+          </span>
+          <h2 class="text-2xl font-extrabold text-white leading-tight">
+            Loge Box 132L, Box 3
+          </h2>
+          <p id="modal-event-title" class="text-xs text-gray-300 mt-1 font-medium">
+            Atlanta Falcons vs. Carolina Panthers • Sun, Sep 20, 2026, 1:00pm
+          </p>
+          <p id="modal-event-venue" class="text-xs text-gray-400">
+            Mercedes-Benz Stadium, Atlanta, GA
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-white text-gray-900 p-6 rounded-t-2xl -mt-2 relative z-20 flex-1 overflow-y-auto">
+        <div class="flex items-center gap-1.5 mb-5 pb-4 border-b border-gray-100">
+          <i data-lucide="zap" class="w-7 h-7 text-emerald-500 fill-emerald-500"></i>
+          <span id="modal-event-price" class="text-3xl font-black tracking-tight text-gray-900">$4,000</span>
+        </div>
+
+        <div class="mb-6">
+          <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Included</h4>
+          <ul class="space-y-3">
+            <li class="flex items-center gap-3 text-sm font-semibold text-gray-800">
+              <i data-lucide="ticket" class="w-5 h-5 text-gray-600"></i>
+              <span>4 Tickets</span>
+            </li>
+            <li class="flex items-center gap-3 text-sm font-semibold text-gray-800">
+              <i data-lucide="car" class="w-5 h-5 text-gray-600"></i>
+              <span>1 Parking Pass</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-6 pb-4 border-b border-gray-100">
+          <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Available for Purchase</h4>
+          <div class="flex items-center gap-3 text-sm font-semibold text-gray-800">
+            <i data-lucide="utensils" class="w-5 h-5 text-gray-600"></i>
+            <span>Food & Beverage Catering</span>
+          </div>
+        </div>
+
+        <div class="space-y-3 text-center">
+          <button onclick="openNameModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition text-base">
+            <i data-lucide="zap" class="w-5 h-5 fill-white"></i>
+            Instant Book & Chat
+          </button>
+
+          <button onclick="openNameModal()" class="w-full text-blue-600 hover:text-blue-800 text-sm font-semibold py-1">
+            Contact Us Online
+          </button>
+
+          <div>
+            <a href="tel:18005927043" class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1">
+              Call Us +1 (800) 592-7043
+            </a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 2. NAME PROMPT MODAL ================= -->
+  <div id="name-modal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
+    <div class="bg-white text-gray-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center">
+      <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+        <i data-lucide="user" class="w-6 h-6"></i>
+      </div>
+      <h3 class="text-xl font-bold text-gray-900 mb-1">Enter Your Name</h3>
+      <p class="text-xs text-gray-500 mb-5">Please provide your name to start chatting with Ann about booking this suite.</p>
+      
+      <input 
+        id="user-name-input" 
+        type="text" 
+        placeholder="First and Last Name" 
+        class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm mb-4 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+        onkeypress="if(event.key === 'Enter') startChatSession()"
+      />
+      
+      <button onclick="startChatSession()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition">
+        Continue to Chat
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= 3. REAL-TIME CHAT DRAWER ================= -->
+  <div id="chat-drawer" class="fixed inset-0 z-50 hidden bg-black/70 flex justify-center items-end sm:items-center p-0 sm:p-4">
+    <div class="w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+      
+      <div class="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-base text-white shadow-sm">
+            A
+          </div>
+          <div>
+            <h4 class="font-bold text-sm leading-tight text-white">Ann</h4>
+            <span class="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online | Ticket Support
+            </span>
+          </div>
+        </div>
+        <button onclick="closeChatDrawer()" class="p-1 hover:bg-slate-800 rounded-lg text-gray-300 transition">
+          <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+      </div>
+
+      <div id="messages-list" class="flex-1 p-4 overflow-y-auto space-y-3 bg-gray-50"></div>
+
+      <div class="p-3 bg-white border-t border-gray-200 flex items-center gap-2">
+        <label for="image-upload" class="cursor-pointer p-2 text-gray-500 hover:text-blue-600 transition">
+          <i data-lucide="image" class="w-5 h-5"></i>
+          <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="uploadImage(event)" />
+        </label>
+        
+        <input 
+          id="message-input" 
+          type="text" 
+          placeholder="Type a message to Ann..." 
+          class="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" 
+          onkeypress="if(event.key === 'Enter') sendMessage()" 
+        />
+        
+        <button onclick="sendMessage()" class="bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 transition">
+          <i data-lucide="send" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // Safe Socket.io Initialization
+    let socket;
+    try {
+      socket = io();
+    } catch(e) {
+      console.warn("Socket.io script not found or server offline");
+    }
+
+    let currentUserName = '';
+    let selectedEvent = null;
+
+    const events = [
+      { id: 1, date: "Sep 20", time: "Sun 1:00pm", fullDate: "Sun, Sep 20, 2026, 1:00pm", title: "Atlanta Falcons vs. Carolina Panthers", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "5 Suites", price: "$4,000", highlight: false },
+      { id: 2, date: "Oct 11", time: "Sun 8:20pm", fullDate: "Sun, Oct 11, 2026, 8:20pm", title: "Atlanta Falcons vs. Baltimore Ravens", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "3 Suites", price: "$4,500", highlight: false },
+      { id: 3, date: "Oct 18", time: "Sun 1:00pm", fullDate: "Sun, Oct 18, 2026, 1:00pm", title: "Atlanta Falcons vs. Chicago Bears", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "3 Suites", price: "$4,851", highlight: false },
+      { id: 4, date: "Oct 25", time: "Sun 1:00pm", fullDate: "Sun, Oct 25, 2026, 1:00pm", title: "Atlanta Falcons vs. San Francisco 49ers", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "2 Suites", price: "$18,500", highlight: true },
+      { id: 5, date: "Nov 15", time: "Sun 1:00pm", fullDate: "Sun, Nov 15, 2026, 1:00pm", title: "Atlanta Falcons vs. Kansas City Chiefs", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "4 Suites", price: "$10,000", highlight: false },
+      { id: 6, date: "Dec 6", time: "Sun 1:00pm", fullDate: "Sun, Dec 6, 2026, 1:00pm", title: "Atlanta Falcons vs. Detroit Lions", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "5 Suites", price: "$5,876", highlight: false },
+      { id: 7, date: "Date TBD", time: "Time TBD", fullDate: "Date & Time TBD", title: "Atlanta Falcons vs. Tampa Bay Buccaneers", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "12 Suites", price: "$4,876", highlight: false },
+      { id: 8, date: "Jan 3, 2027", time: "Sun 1:00pm", fullDate: "Sun, Jan 3, 2027, 1:00pm", title: "Atlanta Falcons vs. New Orleans Saints", venue: "Mercedes-Benz Stadium, Atlanta, GA", suites: "9 Suites", price: "$6,000", highlight: false }
+    ];
+
+    function renderEvents() {
+      const container = document.getElementById('events-container');
+      if (!container) return;
+
+      container.innerHTML = events.map(event => `
+        <div onclick="openBookingModal(${event.id})" class="flex items-center justify-between p-5 hover:bg-gray-50 transition cursor-pointer group">
+          <div class="flex-1 pr-4">
+            <div class="flex items-baseline gap-2 mb-1">
+              <span class="text-base font-bold ${event.highlight ? 'text-blue-600' : 'text-gray-900'}">${event.date}</span>
+              <span class="text-xs text-gray-500 font-medium">${event.time}</span>
+            </div>
+            <h3 class="text-base font-bold ${event.highlight ? 'text-blue-600' : 'text-gray-900'} group-hover:text-blue-600 leading-snug">
+              ${event.title}
+            </h3>
+            <p class="text-xs text-gray-500 mt-1">${event.venue}</p>
+            <div class="flex items-center gap-3 mt-2 text-xs font-medium text-gray-600">
+              <span class="flex items-center gap-1 text-emerald-600 font-semibold">
+                <i data-lucide="zap" class="w-3.5 h-3.5 fill-emerald-600"></i>
+                ${event.suites}
+              </span>
+              <span class="text-gray-300">•</span>
+              <span>From <strong class="text-gray-900">${event.price}</strong></span>
+            </div>
+          </div>
+          <i data-lucide="chevron-right" class="w-6 h-6 text-blue-600 flex-shrink-0 group-hover:translate-x-0.5 transition-transform"></i>
+        </div>
+      `).join('');
+      
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }
+
+    function openBookingModal(eventId) {
+      selectedEvent = events.find(e => e.id === eventId);
+      if (!selectedEvent) return;
+
+      document.getElementById('modal-event-title').innerText = `${selectedEvent.title} • ${selectedEvent.fullDate}`;
+      document.getElementById('modal-event-venue').innerText = selectedEvent.venue;
+      document.getElementById('modal-event-price').innerText = selectedEvent.price;
+
+      document.getElementById('booking-modal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeBookingModal() {
+      document.getElementById('booking-modal').classList.add('hidden');
+      document.body.style.overflow = 'auto';
+    }
+
+    function openNameModal() {
+      if (currentUserName) {
+        startChatSession();
+      } else {
+        document.getElementById('name-modal').classList.remove('hidden');
+      }
+    }
+
+    function startChatSession() {
+      if (!currentUserName) {
+        const input = document.getElementById('user-name-input');
+        if (!input.value.trim()) return alert('Please enter your name.');
+        currentUserName = input.value.trim();
+      }
+
+      document.getElementById('name-modal').classList.add('hidden');
+      document.getElementById('booking-modal').classList.add('hidden');
+      document.getElementById('chat-drawer').classList.remove('hidden');
+
+      if (socket) {
+        socket.emit('join_chat', {
+          userName: currentUserName,
+          ticketTitle: selectedEvent ? `${selectedEvent.title} (${selectedEvent.price})` : 'Loge Box 132L, Box 3 ($4,000)'
+        });
+      }
+    }
+
+    function closeChatDrawer() {
+      document.getElementById('chat-drawer').classList.add('hidden');
+      document.body.style.overflow = 'auto';
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      if (socket) {
+        socket.emit('user_message', { text });
+      }
+      input.value = '';
+    }
+
+    async function uploadImage(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('userName', currentUserName);
+      if (socket) formData.append('socketId', socket.id);
+
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (socket) {
+          socket.emit('user_message', { image: data.imageUrl, text: '' });
+        }
+      } catch (err) {
+        alert('Image upload failed.');
+      }
+    }
+
+    if (socket) {
+      socket.on('chat_message', (msg) => {
+        const list = document.getElementById('messages-list');
+        const isSelf = msg.isUser;
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `flex flex-col ${isSelf ? 'items-end' : 'items-start'}`;
+
+        let contentHtml = '';
+        if (msg.image) {
+          contentHtml += `<img src="${msg.image}" class="max-w-[200px] rounded-lg mb-1 shadow-sm border border-gray-200" />`;
+        }
+        if (msg.text) {
+          contentHtml += `<div class="px-3.5 py-2 rounded-2xl text-sm max-w-[80%] ${
+            isSelf ? 'bg-blue-600 text-white rounded-br-none shadow-sm' : 'bg-gray-200 text-gray-900 rounded-bl-none'
+          }">${msg.text}</div>`;
+        }
+
+        msgDiv.innerHTML = `
+          <span class="text-[10px] text-gray-400 mb-0.5 px-1 font-medium">${msg.sender}</span>
+          ${contentHtml}
+        `;
+
+        list.appendChild(msgDiv);
+        list.scrollTop = list.scrollHeight;
+      });
+    }
+
+    // Carousel Image Navigation
+    const images = [
+      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=800&q=80"
+    ];
+    let currentIndex = 0;
+
+    function updateCarousel() {
+      document.getElementById('carousel-img').src = images[currentIndex];
+      document.getElementById('slide-index').innerText = currentIndex + 19;
+    }
+
+    function nextImage() {
+      currentIndex = (currentIndex + 1) % images.length;
+      updateCarousel();
+    }
+
+    function prevImage() {
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      updateCarousel();
+    }
+
+    // Ensure DOM is fully loaded before rendering list
+    window.addEventListener('DOMContentLoaded', () => {
+      renderEvents();
+    });
+  </script>
+</body>
+</html>
